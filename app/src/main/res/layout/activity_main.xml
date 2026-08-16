@@ -23,6 +23,13 @@
         android:minHeight="48dp"
         android:layout_marginBottom="12dp" />
 
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/switchLocal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Usar Inferencia Local (ONNX)"
+        android:layout_marginBottom="12dp" />
+
     <Button
         android:id="@+id/btnAccionPrincipal"
         android:layout_width="match_parent"

@@ -17,7 +17,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
     }
 
     buildTypes {
@@ -33,9 +32,8 @@ android {
     }
     packaging {
         jniLibs {
-            // Le dice a Android que no intente extraer ni forzar la alineación estricta
-            // de librerías nativas de terceros desactualizadas
-            useLegacyPackaging = true
+            // Se elimina useLegacyPackaging para permitir que AGP maneje la alineación de 16 KB
+            // necesaria para dispositivos modernos (Android 15+).
         }
     }
 }
@@ -47,6 +45,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.exifinterface)
     implementation(libs.material)
+    implementation(libs.onnx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
@@ -57,7 +56,7 @@ dependencies {
     // okhttp (Necesario para el manejo de archivos/Multipart)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // Dependencias de CameraX
-    val camerax_version = "1.3.4" // Versión estable y robusta
+    val camerax_version = "1.6.1" // Versión estable con soporte completo para 16 KB
     implementation("androidx.camera:camera-core:$camerax_version")
     implementation("androidx.camera:camera-camera2:$camerax_version")
     implementation("androidx.camera:camera-lifecycle:$camerax_version")
