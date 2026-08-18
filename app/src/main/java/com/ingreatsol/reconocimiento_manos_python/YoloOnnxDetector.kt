@@ -15,9 +15,19 @@ class YoloOnnxDetector(private val context: Context) {
     private val inputSize = 640
     private val labels = listOf("racimo", "mano") // Ajustar según las clases reales del modelo
 
+    // Variables para el tracking
+    private var nextId = 1
+    private var previousDetections = mutableListOf<Deteccion>()
+    private val trackingIouThreshold = 0.3f
+
     init {
         val modelBytes = context.assets.open("best.onnx").readBytes()
         session = env.createSession(modelBytes)
+    }
+
+    fun resetTracker() {
+        nextId = 1
+        previousDetections.clear()
     }
 
     fun detect(bitmap: Bitmap): ApiResponse {
@@ -131,14 +141,46 @@ class YoloOnnxDetector(private val context: Context) {
         }
         
         val nmsDetections = applyNMS(detections)
+        val trackedDetections = applyTracking(nmsDetections)
 
         return ApiResponse(
             error = false,
-            racimos = nmsDetections.count { it.clase == "racimo" },
-            manos = nmsDetections.count { it.clase == "mano" },
+            racimos = trackedDetections.count { it.clase == "racimo" },
+            manos = trackedDetections.count { it.clase == "mano" },
             color_cinta = "Local ONNX",
-            detecciones = nmsDetections
+            detecciones = trackedDetections
         )
+    }
+
+    private fun applyTracking(currentDetections: List<Deteccion>): List<Deteccion> {
+        val trackedDetections = mutableListOf<Deteccion>()
+        val usedPreviousIndices = mutableSetOf<Int>()
+
+        for (current in currentDetections) {
+            var bestIou = 0f
+            var bestIndex = -1
+
+            for (i in previousDetections.indices) {
+                if (i in usedPreviousIndices) continue
+                if (previousDetections[i].clase != current.clase) continue
+
+                val iou = calculateIoU(current.box, previousDetections[i].box)
+                if (iou > bestIou && iou > trackingIouThreshold) {
+                    bestIou = iou
+                    bestIndex = i
+                }
+            }
+
+            if (bestIndex != -1) {
+                trackedDetections.add(current.copy(id = previousDetections[bestIndex].id))
+                usedPreviousIndices.add(bestIndex)
+            } else {
+                trackedDetections.add(current.copy(id = nextId++))
+            }
+        }
+
+        previousDetections = trackedDetections.toMutableList()
+        return trackedDetections
     }
 
     private fun applyNMS(detections: List<Deteccion>): List<Deteccion> {

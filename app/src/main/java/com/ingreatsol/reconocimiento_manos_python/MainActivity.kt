@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var apiService: YoloApiService
     private var yoloOnnxDetector: YoloOnnxDetector? = null
 
-    val BASE_URL = "http://192.168.9.134:8000/"
+    val BASE_URL = "http://192.168.0.115:8000/"
 
     // Historial del lote de imágenes actual
     private val loteFotosProcesadas = mutableListOf<FotoProcesada>()
@@ -294,6 +294,7 @@ class MainActivity : AppCompatActivity() {
         btnLimpiarEscaneo.setOnClickListener {
             manosRegistradasIds.clear()
             maxManosEnUnInstante360 = 0
+            yoloOnnxDetector?.resetTracker()
             resatadorView.setDetecciones(emptyList(), 1, 1, previewViewCameraX)
             txtContadorFotos.text = "Manos en este instante (Máx): 0"
             actualizarResultadosEnVivo(0, 0, "Ninguno")
@@ -370,6 +371,7 @@ class MainActivity : AppCompatActivity() {
 
         manosRegistradasIds.clear()
         maxManosEnUnInstante360 = 0
+        yoloOnnxDetector?.resetTracker()
 
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
