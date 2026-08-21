@@ -18,7 +18,7 @@ class YoloOnnxDetector(private val context: Context) {
     // Variables para el tracking
     private var nextId = 1
     private var previousDetections = mutableListOf<Deteccion>()
-    private val trackingIouThreshold = 0.3f
+    private val trackingIouThreshold = 0.15f // Bajamos a 0.15 para video rápido
 
     init {
         val modelBytes = context.assets.open("best.onnx").readBytes()
@@ -84,7 +84,7 @@ class YoloOnnxDetector(private val context: Context) {
 
     private fun postprocess(buffer: java.nio.FloatBuffer, numCandidates: Int, numElements: Int, origWidth: Int, origHeight: Int, isTransposed: Boolean): ApiResponse {
         val detections = mutableListOf<Deteccion>()
-        val confThreshold = 0.25f // Bajamos umbral para ver si detecta algo
+        val confThreshold = 0.20f // Bajamos umbral para ver si detecta algo
         
         val output = FloatArray(numCandidates * numElements)
         buffer.get(output)
@@ -156,6 +156,7 @@ class YoloOnnxDetector(private val context: Context) {
         val trackedDetections = mutableListOf<Deteccion>()
         val usedPreviousIndices = mutableSetOf<Int>()
 
+        // 1. Intentar emparejar con las detecciones del frame anterior
         for (current in currentDetections) {
             var bestIou = 0f
             var bestIndex = -1
@@ -175,9 +176,15 @@ class YoloOnnxDetector(private val context: Context) {
                 trackedDetections.add(current.copy(id = previousDetections[bestIndex].id))
                 usedPreviousIndices.add(bestIndex)
             } else {
+                // Si no hay coincidencia, asignar nuevo ID
                 trackedDetections.add(current.copy(id = nextId++))
             }
         }
+
+        // 2. Persistencia para video rápido:
+        // Si una mano desaparece un frame, podríamos intentar "recordarla",
+        // pero por ahora mantendremos la lógica simple con IoU muy bajo (0.15)
+        // para que no pierda el ID ante movimientos bruscos.
 
         previousDetections = trackedDetections.toMutableList()
         return trackedDetections
@@ -191,7 +198,9 @@ class YoloOnnxDetector(private val context: Context) {
         while (sorted.isNotEmpty()) {
             val best = sorted.removeAt(0)
             selected.add(best)
-            sorted.removeAll { calculateIoU(best.box, it.box) > iouThreshold }
+            // CORRECCIÓN: NMS por clase. Solo elimina si son de la misma clase.
+            // Esto evita que el cuadro del 'racimo' elimine los cuadros de las 'manos' dentro de él.
+            sorted.removeAll { it.clase == best.clase && calculateIoU(best.box, it.box) > iouThreshold }
         }
         return selected
     }

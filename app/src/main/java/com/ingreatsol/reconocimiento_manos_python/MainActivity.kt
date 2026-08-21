@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var apiService: YoloApiService
     private var yoloOnnxDetector: YoloOnnxDetector? = null
 
-    val BASE_URL = "http://192.168.0.115:8000/"
+    val BASE_URL = "http://192.168.0.117:8000/"
 
     // Historial del lote de imágenes actual
     private val loteFotosProcesadas = mutableListOf<FotoProcesada>()
@@ -80,8 +80,9 @@ class MainActivity : AppCompatActivity() {
     private var maximoRacimosVistos = 0
     private val cintasUnicas = mutableSetOf<String>()
 
-    // Registro global de IDs de manos vistas en el recorrido 360°
+    // Registro global de IDs de manos y racimos vistos en el recorrido 360°
     private val manosRegistradasIds = mutableSetOf<Int>()
+    private val racimosRegistradosIds = mutableSetOf<Int>()
 
     // NUEVO CONTADOR: Guarda permanentemente el pico máximo de manos en un solo instante
     private var maxManosEnUnInstante360 = 0
@@ -293,11 +294,12 @@ class MainActivity : AppCompatActivity() {
         // LÓGICA DEL NUEVO BOTÓN: Reinicia por completo los acumuladores del escaneo actual
         btnLimpiarEscaneo.setOnClickListener {
             manosRegistradasIds.clear()
+            racimosRegistradosIds.clear()
             maxManosEnUnInstante360 = 0
             yoloOnnxDetector?.resetTracker()
             resatadorView.setDetecciones(emptyList(), 1, 1, previewViewCameraX)
             txtContadorFotos.text = "Manos en este instante (Máx): 0"
-            actualizarResultadosEnVivo(0, 0, "Ninguno")
+            actualizarResultadosEnVivo(0, 0, 0, "Ninguno")
             Toast.makeText(this, "Escaneo limpio. ¡Listo para registrar un nuevo racimo!", Toast.LENGTH_SHORT).show()
         }
 
@@ -370,6 +372,7 @@ class MainActivity : AppCompatActivity() {
         txtContadorFotos.text = "Modo: Tiempo Real (CameraX)"
 
         manosRegistradasIds.clear()
+        racimosRegistradosIds.clear()
         maxManosEnUnInstante360 = 0
         yoloOnnxDetector?.resetTracker()
 
@@ -405,11 +408,17 @@ class MainActivity : AppCompatActivity() {
                                 if (apiResult.manos > maxManosEnUnInstante360) {
                                     maxManosEnUnInstante360 = apiResult.manos
                                 }
+                                // SOLO AGREGAR IDS PARA EL CONTEO ÚNICO POR CLASE
                                 for (det in apiResult.detecciones) {
-                                    det.id?.let { manosRegistradasIds.add(it) }
+                                    if (det.clase == "mano") {
+                                        det.id?.let { manosRegistradasIds.add(it) }
+                                    } else if (det.clase == "racimo") {
+                                        det.id?.let { racimosRegistradosIds.add(it) }
+                                    }
                                 }
-                                txtContadorFotos.text = "Manos en este instante (Máx): $maxManosEnUnInstante360"
-                                actualizarResultadosEnVivo(maxManosEnUnInstante360, manosRegistradasIds.size, "ONNX")
+                                val picoAjustado = if (maxManosEnUnInstante360 > 0) maxManosEnUnInstante360 + 3 else 0
+                                txtContadorFotos.text = "Manos en este instante (Máx): $picoAjustado"
+                                actualizarResultadosEnVivo(maxManosEnUnInstante360, manosRegistradasIds.size, racimosRegistradosIds.size, "ONNX")
                                 estaProcesandoFrameEnVivo = false
                                 imageProxy.close()
                             }
@@ -429,14 +438,21 @@ class MainActivity : AppCompatActivity() {
                                             val apiResult = response.body()!!
                                             if (!apiResult.error) {
                                                 resatadorView.setDetecciones(apiResult.detecciones, bitmap.width, bitmap.height, previewViewCameraX)
+                                                
                                                 if (apiResult.manos > maxManosEnUnInstante360) {
                                                     maxManosEnUnInstante360 = apiResult.manos
                                                 }
+                                                // SOLO AGREGAR IDS PARA EL CONTEO ÚNICO POR CLASE
                                                 for (det in apiResult.detecciones) {
-                                                    det.id?.let { manosRegistradasIds.add(it) }
+                                                    if (det.clase == "mano") {
+                                                        det.id?.let { manosRegistradasIds.add(it) }
+                                                    } else if (det.clase == "racimo") {
+                                                        det.id?.let { racimosRegistradosIds.add(it) }
+                                                    }
                                                 }
-                                                txtContadorFotos.text = "Manos en este instante (Máx): $maxManosEnUnInstante360"
-                                                actualizarResultadosEnVivo(maxManosEnUnInstante360, manosRegistradasIds.size, apiResult.color_cinta)
+                                                val picoAjustado = if (maxManosEnUnInstante360 > 0) maxManosEnUnInstante360 + 3 else 0
+                                                txtContadorFotos.text = "Manos en este instante (Máx): $picoAjustado"
+                                                actualizarResultadosEnVivo(maxManosEnUnInstante360, manosRegistradasIds.size, racimosRegistradosIds.size, apiResult.color_cinta)
                                             }
                                         }
                                         estaProcesandoFrameEnVivo = false
@@ -477,13 +493,19 @@ class MainActivity : AppCompatActivity() {
         previewViewCameraX.visibility = View.GONE
     }
 
-    private fun actualizarResultadosEnVivo(manosInstante: Int, totalRecorrido: Int, cinta: String?) {
+    private fun actualizarResultadosEnVivo(manosInstante: Int, totalManos: Int, totalRacimos: Int, cinta: String?) {
         val cintaTexto = if (!cinta.isNullOrBlank()) cinta else "Ninguno"
+        
+        // Ajuste solicitado: +3 a los resultados de manos si se detecta al menos una
+        val manosInstanteAjustado = if (manosInstante > 0) manosInstante + 3 else 0
+        val totalManosAjustado = if (totalManos > 0) totalManos + 3 else 0
+
         tvResultados.text = """
             Resultados (Tiempo Real / 360°):
             ----------------------------------
-            Pico Máx Manos en Pantalla: $manosInstante
-            Total Manos del Racimo (Sin repetir): $totalRecorrido
+            Pico Máx Manos en Pantalla: $manosInstanteAjustado
+            Total Manos Únicas: $totalManosAjustado
+            Total Racimos Únicos: $totalRacimos
             Color de cinta: $cintaTexto
         """.trimIndent()
     }
